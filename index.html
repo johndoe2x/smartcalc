@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Expense Tracker</title>
+  <style>
+    :root {
+      --bg-color: #f4f6f8;
+      --card-bg: #fff;
+      --text-color: #333;
+      --btn-bg: #007bff;
+      --btn-hover: #0056b3;
+      --border-color: #ccc;
+      --thead-bg: #f1f1f1;
+    }
+
+    [data-theme="dark"] {
+      --bg-color: #121212;
+      --card-bg: #1e1e1e;
+      --text-color: #eee;
+      --btn-bg: #1e88e5;
+      --btn-hover: #1565c0;
+      --border-color: #444;
+      --thead-bg: #2a2a2a;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      padding: 2rem;
+      margin: 0;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    h1 {
+      text-align: center;
+      color: var(--text-color);
+    }
+
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: var(--card-bg);
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      flex: 1;
+      padding: 0.75rem;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 1rem;
+      background: none;
+      color: var(--text-color);
+    }
+
+    button {
+      padding: 0.75rem 1.2rem;
+      background-color: var(--btn-bg);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background-color: var(--btn-hover);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+    }
+
+    th, td {
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      text-align: left;
+    }
+
+    th {
+      background-color: var(--thead-bg);
+    }
+
+    .actions button {
+      margin-right: 5px;
+      font-size: 0.85rem;
+      padding: 0.4rem 0.6rem;
+    }
+
+    tfoot td {
+      font-weight: bold;
+      border-top: 2px solid var(--border-color);
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+  </style>
+</head>
+<body data-theme="light">
+
+  <h1>📝 Description & Amount Calculator</h1>
+
+  <div class="container">
+    <div class="toolbar">
+      <button onclick="exportToCSV()">Export to CSV</button>
+      <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    </div>
+
+    <form id="data-form">
+      <input type="text" id="description" placeholder="Description" value="Debt" required />
+      <input type="number" id="amount" placeholder="Amount" min="0.01" step="0.01" required />
+      <button type="submit">Add</button>
+    </form>
+
+    <table id="data-table">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th>Amount</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr>
+          <td style="text-align:right;" colspan="1">Grand Total:</td>
+          <td id="grand-total">₹0.00</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <script>
+    const form = document.getElementById('data-form');
+    const descriptionInput = document.getElementById('description');
+    const amountInput = document.getElementById('amount');
+    const tableBody = document.querySelector('#data-table tbody');
+    const grandTotalCell = document.getElementById('grand-total');
+
+    let grandTotal = 0;
+
+    // Load data on page load
+    window.addEventListener('load', () => {
+      loadDataFromLocalStorage();
+    });
+
+    // Add new entry
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const description = descriptionInput.value.trim();
+      const amount = parseFloat(amountInput.value);
+
+      if (!description || isNaN(amount) || amount <= 0) {
+        alert("Please enter a valid amount.");
+        return;
+      }
+
+      addItem(description, amount);
+
+      saveDataToLocalStorage();
+      form.reset();
+      descriptionInput.value = 'Debt';
+    });
+
+    // Helper function to add item
+    function addItem(desc, amt) {
+      const newRow = document.createElement('tr');
+      newRow.innerHTML = `
+        <td contenteditable="false">${desc}</td>
+        <td contenteditable="false">₹${amt.toFixed(2)}</td>
+        <td class="actions">
+          <button type="button" onclick="editRow(this)">Edit</button>
+          <button type="button" onclick="deleteRow(this)">Delete</button>
+        </td>
+      `;
+      tableBody.appendChild(newRow);
+      updateGrandTotal();
+    }
+
+    // Edit or Save row
+    window.editRow = function(button) {
+      const row = button.closest('tr');
+      const cells = row.querySelectorAll('td');
+      const isEditing = button.textContent === 'Edit';
+
+      if (isEditing) {
+        cells[0].contentEditable = 'true';
+        cells[1].contentEditable = 'true';
+        cells[1].innerText = cells[1].innerText.replace('₹', '');
+        button.textContent = 'Save';
+      } else {
+        const newDesc = cells[0].innerText.trim();
+        let newAmt = parseFloat(cells[1].innerText);
+
+        if (!newDesc || isNaN(newAmt) || newAmt <= 0) {
+          alert("Invalid input. Please enter valid values.");
+          return;
+        }
+
+        cells[0].contentEditable = 'false';
+        cells[1].contentEditable = 'false';
+        cells[1].innerText = `₹${newAmt.toFixed(2)}`;
+        button.textContent = 'Edit';
+
+        updateGrandTotal();
+        saveDataToLocalStorage();
+      }
+    };
+
+    // Delete row
+    window.deleteRow = function(button) {
+      const row = button.closest('tr');
+      row.remove();
+      updateGrandTotal();
+      saveDataToLocalStorage();
+    };
+
+    // Recalculate total
+    function updateGrandTotal() {
+      let total = 0;
+      document.querySelectorAll('#data-table tbody tr').forEach(row => {
+        const amountText = row.children[1].innerText.replace('₹', '');
+        const amount = parseFloat(amountText);
+        if (!isNaN(amount)) total += amount;
+      });
+      grandTotalCell.innerText = `₹${total.toFixed(2)}`;
+    }
+
+    // Save data to localStorage
+    function saveDataToLocalStorage() {
+      const items = [];
+      document.querySelectorAll('#data-table tbody tr').forEach(row => {
+        const desc = row.children[0].innerText.trim();
+        const amt = parseFloat(row.children[1].innerText.replace('₹', ''));
+        if (!isNaN(amt)) items.push({ description: desc, amount: amt });
+      });
+      localStorage.setItem('expenseData', JSON.stringify(items));
+    }
+
+    // Load data from localStorage
+    function loadDataFromLocalStorage() {
+      const savedData = localStorage.getItem('expenseData');
+      if (savedData) {
+        try {
+          const items = JSON.parse(savedData);
+          items.forEach(item => addItem(item.description, item.amount));
+        } catch (e) {
+          console.error("Failed to parse stored data.");
+        }
+      }
+    }
+
+    // Export to CSV
+    window.exportToCSV = function () {
+      const rows = [];
+      const headers = ['Description', 'Amount'];
+      rows.push(headers.join(','));
+
+      document.querySelectorAll('#data-table tbody tr').forEach(row => {
+        const desc = row.children[0].innerText.trim();
+        const amt = row.children[1].innerText.replace('₹', '').trim();
+        rows.push([desc, amt].join(','));
+      });
+
+      const csvContent = rows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'expenses.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    // Toggle dark mode
+    window.toggleDarkMode = function () {
+      const currentTheme = document.body.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.body.setAttribute('data-theme', newTheme);
+      localStorage.setItem('appTheme', newTheme);
+    };
+
+    // Apply saved theme
+    window.addEventListener('load', () => {
+      const savedTheme = localStorage.getItem('appTheme') || 'light';
+      document.body.setAttribute('data-theme', savedTheme);
+    });
+  </script>
+
+</body>
+</html>
